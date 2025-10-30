@@ -295,61 +295,71 @@ void create_ha_screen(lv_obj_t* parent) {
     lv_style_set_border_width(&style_selected, 3);
     lv_style_set_border_side(&style_selected, LV_BORDER_SIDE_FULL);
 
+    // --- Reworked circular layout for 360x360 display ---
+    const int btn_size = 80;
+    const int radius = 130;
+
+    // Helper to create a circular button container.
+    // Note: This returns a generic lv_obj_t* but creates an lv_btn. This is fine.
+    // The caller is responsible for creating the label inside.
+    auto create_circular_container = [&](ha_control_t ctrl_type) -> lv_obj_t* {
+        lv_obj_t* btn = lv_btn_create(parent);
+        lv_obj_set_size(btn, btn_size, btn_size);
+        lv_obj_set_style_radius(btn, LV_RADIUS_CIRCLE, 0);
+        lv_obj_add_event_cb(btn, ha_select_event_cb, LV_EVENT_CLICKED, (void*)ctrl_type);
+        return btn;
+    };
+
+    // 1. Power Button (Top)
     ha_on_off_btn = lv_btn_create(parent);
-    lv_obj_set_size(ha_on_off_btn, 180, 50);
-    lv_obj_align(ha_on_off_btn, LV_ALIGN_TOP_MID, 0, 15);
+    lv_obj_set_size(ha_on_off_btn, btn_size, btn_size);
+    lv_obj_set_style_radius(ha_on_off_btn, LV_RADIUS_CIRCLE, 0);
+    lv_obj_align(ha_on_off_btn, LV_ALIGN_CENTER, 0, -radius);
     lv_obj_add_flag(ha_on_off_btn, LV_OBJ_FLAG_CHECKABLE);
     lv_obj_add_event_cb(ha_on_off_btn, ha_power_press_event_cb, LV_EVENT_ALL, NULL);
-
     lv_obj_t* on_off_label = lv_label_create(ha_on_off_btn);
-    lv_label_set_text(on_off_label, LV_SYMBOL_POWER " ON/OFF");
+    lv_label_set_text(on_off_label, LV_SYMBOL_POWER);
     lv_obj_center(on_off_label);
 
-    ha_mode_cont = lv_obj_create(parent);
-    lv_obj_set_size(ha_mode_cont, 150, 60);
-    lv_obj_align(ha_mode_cont, LV_ALIGN_TOP_LEFT, 20, 80);
+    // 2. Mode (Top-Right)
+    ha_mode_cont = create_circular_container(HA_CONTROL_MODE);
+    lv_obj_align(ha_mode_cont, LV_ALIGN_CENTER, (int)(radius * 0.866f), (int)(-radius * 0.5f));
     ha_mode_label = lv_label_create(ha_mode_cont);
     lv_obj_center(ha_mode_label);
-    lv_obj_add_flag(ha_mode_cont, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(ha_mode_cont, ha_select_event_cb, LV_EVENT_CLICKED, (void*)HA_CONTROL_MODE);
 
-    ha_preinf_time_cont = lv_obj_create(parent);
-    lv_obj_set_size(ha_preinf_time_cont, 150, 80);
-    lv_obj_align(ha_preinf_time_cont, LV_ALIGN_TOP_RIGHT, -20, 80);
+    // 3. Pre-infusion Time (Bottom-Right)
+    ha_preinf_time_cont = create_circular_container(HA_CONTROL_PREINF_TIME);
+    lv_obj_align(ha_preinf_time_cont, LV_ALIGN_CENTER, (int)(radius * 0.866f), (int)(radius * 0.5f));
     ha_preinf_time_label = lv_label_create(ha_preinf_time_cont);
     lv_obj_center(ha_preinf_time_label);
-    lv_obj_add_flag(ha_preinf_time_cont, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(ha_preinf_time_cont, ha_select_event_cb, LV_EVENT_CLICKED, (void*)HA_CONTROL_PREINF_TIME);
 
-    ha_temp_cont = lv_obj_create(parent);
-    lv_obj_set_size(ha_temp_cont, 150, 80);
-    lv_obj_align(ha_temp_cont, LV_ALIGN_CENTER, -85, 30);
-    ha_temp_label = lv_label_create(ha_temp_cont);
-    lv_obj_center(ha_temp_label);
-    lv_obj_add_flag(ha_temp_cont, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(ha_temp_cont, ha_select_event_cb, LV_EVENT_CLICKED, (void*)HA_CONTROL_TEMP);
+    // 4. Backflush (Bottom)
+    ha_backflush_cont = create_circular_container(HA_CONTROL_BACKFLUSH);
+    lv_obj_align(ha_backflush_cont, LV_ALIGN_CENTER, 0, radius);
+    lv_obj_t* backflush_label = lv_label_create(ha_backflush_cont);
+    lv_label_set_text(backflush_label, LV_SYMBOL_REFRESH);
+    lv_obj_center(backflush_label);
 
-    ha_steam_cont = lv_obj_create(parent);
-    lv_obj_set_size(ha_steam_cont, 120, 80);
-    lv_obj_align(ha_steam_cont, LV_ALIGN_CENTER, 85, 30);
+    // 5. Steam (Bottom-Left)
+    ha_steam_cont = create_circular_container(HA_CONTROL_STEAM);
+    lv_obj_align(ha_steam_cont, LV_ALIGN_CENTER, (int)(-radius * 0.866f), (int)(radius * 0.5f));
     ha_steam_label = lv_label_create(ha_steam_cont);
     lv_obj_center(ha_steam_label);
-    lv_obj_add_flag(ha_steam_cont, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(ha_steam_cont, ha_select_event_cb, LV_EVENT_CLICKED, (void*)HA_CONTROL_STEAM);
 
-    ha_backflush_cont = lv_btn_create(parent);
-    lv_obj_set_size(ha_backflush_cont, 180, 50);
-    lv_obj_align(ha_backflush_cont, LV_ALIGN_BOTTOM_RIGHT, -20, -15);
-    lv_obj_t* backflush_label = lv_label_create(ha_backflush_cont);
-    lv_label_set_text(backflush_label, LV_SYMBOL_REFRESH " BACKFLUSH");
-    lv_obj_center(backflush_label);
-    lv_obj_add_event_cb(ha_backflush_cont, ha_select_event_cb, LV_EVENT_CLICKED, (void*)HA_CONTROL_BACKFLUSH);
+    // 6. Temp (Top-Left)
+    ha_temp_cont = create_circular_container(HA_CONTROL_TEMP);
+    lv_obj_align(ha_temp_cont, LV_ALIGN_CENTER, (int)(-radius * 0.866f), (int)(-radius * 0.5f));
+    ha_temp_label = lv_label_create(ha_temp_cont);
+    lv_obj_center(ha_temp_label);
 
+    // Last Shot Label (Center)
     lv_obj_t* last_shot_cont = lv_obj_create(parent);
+    lv_obj_remove_style_all(last_shot_cont); // Make it transparent so it doesn't block view
     lv_obj_set_size(last_shot_cont, 120, 50);
-    lv_obj_align(last_shot_cont, LV_ALIGN_BOTTOM_LEFT, 20, -15);
+    lv_obj_align(last_shot_cont, LV_ALIGN_CENTER, 0, 0);
     ha_last_shot_label = lv_label_create(last_shot_cont);
     lv_obj_center(ha_last_shot_label);
+    lv_obj_set_style_text_align(ha_last_shot_label, LV_TEXT_ALIGN_CENTER, 0);
 
     update_ha_mode_ui(current_mode_index);
     update_ha_preinfusion_time_ui(current_preinfusion_time);
