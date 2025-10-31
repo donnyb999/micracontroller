@@ -1,0 +1,309 @@
+- id: '1760433552863'
+  alias: micra on test
+  description: ''
+  triggers:
+  - type: turned_on
+    device_id: 091ccf7a1b6798c6fe23a7986842a3c3
+    entity_id: 8d9822d909b6491191c5c15f211bd1f6
+    domain: switch
+    trigger: device
+  conditions: []
+  actions:
+  - type: turn_on
+    device_id: 7a49258acdfb7bf4c0efcc0e514bfbe2
+    entity_id: 20e71b2bf8eead1d32e37216e36c0c0e
+    domain: switch
+  mode: single
+- id: '1760433599582'
+  alias: micra off test
+  description: ''
+  triggers:
+  - type: turned_off
+    device_id: 091ccf7a1b6798c6fe23a7986842a3c3
+    entity_id: 8d9822d909b6491191c5c15f211bd1f6
+    domain: switch
+    trigger: device
+  conditions: []
+  actions:
+  - type: turn_off
+    device_id: 7a49258acdfb7bf4c0efcc0e514bfbe2
+    entity_id: 20e71b2bf8eead1d32e37216e36c0c0e
+    domain: switch
+  mode: single
+- id: '1760509923544'
+  alias: Micra linked preinfusion time
+  description: ''
+  use_blueprint:
+    path: alexdelprete/ha-blueprint-linked-entities.yaml
+    input:
+      linked_entity:
+      - number.linea_micra_control_pre_infusion_time
+      - number.micra_preinfusion_time
+- id: '1760510766030'
+  alias: Sync ESP32 Pre-infusion Time to Micra
+  description: Updates the Micra pre-infusion time when the ESP32 controller value
+    changes.
+  triggers:
+  - trigger: state
+    entity_id:
+    - number.linea_micra_control_pre_infusion_time
+  actions:
+  - target:
+      entity_id: number.micra_preinfusion_time
+    data:
+      value: '{{ trigger.to_state.state }}'
+    action: number.set_value
+# 1. Power Sync (Two-way)
+- id: micra_power_sync_to
+  alias: "ESP Control - Sync Power to Micra"
+  trigger:
+    - platform: state
+      entity_id: switch.linea_micra_power
+  action:
+    - service_template: >
+        {% if trigger.to_state.state == 'on' %}
+          switch.turn_on
+        {% else %}
+          switch.turn_off
+        {% endif %}
+      target:
+        entity_id: switch.micra # <-- CHANGE THIS to your Micra's power switch
+- id: micra_power_sync_from
+  alias: "ESP Control - Sync Power from Micra"
+  trigger:
+    - platform: state
+      entity_id: switch.micra # <-- CHANGE THIS to your Micra's power switch
+  action:
+    - service_template: >
+        {% if trigger.to_state.state == 'on' %}
+          switch.turn_on
+        {% else %}
+          switch.turn_off
+        {% endif %}
+      target:
+        entity_id: switch.linea_micra_power
+
+# 2. Coffee Boiler Temperature Sync (Two-way)
+- id: micra_temp_sync_to
+  alias: "ESP Control - Sync Temp to Micra"
+  trigger:
+    - platform: state
+      entity_id: number.linea_micra_target_temp
+  action:
+    - service: number.set_value
+      target:
+        entity_id: number.micra_coffee_target_temperature # <-- CHANGE THIS
+      data:
+        value: "{{ trigger.to_state.state }}"
+
+- id: micra_temp_sync_from
+  alias: "ESP Control - Sync Temp from Micra"
+  trigger:
+    - platform: state
+      entity_id: number.micra_coffee_target_temperature # <-- CHANGE THIS
+  action:
+    - service: number.set_value
+      target:
+        entity_id: number.linea_micra_target_temp
+      data:
+        value: "{{ trigger.to_state.state }}"
+
+# 3. Steam Boiler Level Sync (Two-way, with mapping)
+
+- id: micra_steam_level_sync_to
+  alias: "ESP Control - Sync Steam Level to Micra"
+  trigger:
+    - platform: state
+      entity_id: number.linea_micra_steam_power
+  action:
+    - choose:
+        - conditions:
+            - condition: state
+              entity_id: number.linea_micra_steam_power
+              state: '1' # Numbers from HA are often strings with .0
+          sequence:
+            - service: select.select_option
+              target:
+                entity_id: select.micra_steam_level # <-- CHANGE THIS
+              data:
+                option: "1" # <-- Verify this option name in HA
+        - conditions:
+            - condition: state
+              entity_id: number.linea_micra_steam_power
+              state: '2'
+          sequence:
+            - service: select.select_option
+              target:
+                entity_id: select.micra_steam_level # <-- CHANGE THIS
+              data:
+                option: "2" # <-- Verify this option name in HA
+        - conditions:
+            - condition: state
+              entity_id: number.linea_micra_steam_power
+              state: '3'
+          sequence:
+            - service: select.select_option
+              target:
+                entity_id: select.micra_steam_level # <-- CHANGE THIS
+              data:
+                option: "3" # <-- Verify this option name in HA
+
+- id: micra_steam_level_sync_from
+  alias: "ESP Control - Sync Steam Level from Micra"
+  trigger:
+    - platform: state
+      entity_id: select.micra_steam_level # <-- CHANGE THIS
+  action:
+    - choose:
+        - conditions:
+            - condition: state
+              entity_id: select.micra_steam_level # <-- CHANGE THIS
+              state: "1" # <-- Verify this option name in HA
+          sequence:
+            - service: number.set_value
+              target:
+                entity_id: number.linea_micra_steam_power
+              data:
+                value: 1
+        - conditions:
+            - condition: state
+              entity_id: select.micra_steam_level # <-- CHANGE THIS
+              state: "2" # <-- Verify this option name in HA
+          sequence:
+            - service: number.set_value
+              target:
+                entity_id: number.linea_micra_steam_power
+              data:
+                value: 2
+        - conditions:
+            - condition: state
+              entity_id: select.micra_steam_level # <-- CHANGE THIS
+              state: "3" # <-- Verify this option name in HA
+          sequence:
+            - service: number.set_value
+              target:
+                entity_id: number.linea_micra_steam_power
+              data:
+                value: 3
+
+# 4. Pre-Brewing Mode Sync (Two-way, with mapping)
+
+- id: micra_prebrew_mode_sync_to
+  alias: "ESP Control - Sync Pre-Brew Mode to Micra"
+  trigger:
+    - platform: state
+      entity_id: select.linea_micra_mode
+  action:
+    - choose:
+        - conditions:
+            - condition: state
+              entity_id: select.linea_micra_mode
+              state: "Pre-brew"
+          sequence:
+            - service: select.select_option
+              target:
+                entity_id: select.micra_prebrew_infusion_mode # <-- CHANGE THIS
+              data:
+                option: "Prebrew" # <-- Verify this option name from your JSON
+        - conditions:
+            - condition: state
+              entity_id: select.linea_micra_mode
+              state: "Pre-infusion"
+          sequence:
+            - service: select.select_option
+              target:
+                entity_id: select.micra_prebrew_infusion_mode # <-- CHANGE THIS
+              data:
+                option: "Preinfusion" # <-- Verify this option name from your JSON
+        - conditions:
+            - condition: state
+              entity_id: select.linea_micra_mode
+              state: "Disabled"
+          sequence:
+            - service: select.select_option
+              target:
+                entity_id: select.micra_prebrew_infusion_mode # <-- CHANGE THIS
+              data:
+                option: "Disabled" # <-- Verify this option name from your JSON
+
+- id: micra_prebrew_mode_sync_from
+  alias: "ESP Control - Sync Pre-Brew Mode from Micra"
+  trigger:
+    - platform: state
+      entity_id: select.micra_prebrew_infusion_mode # <-- CHANGE THIS
+  action:
+    - choose:
+        - conditions:
+            - condition: state
+              entity_id: select.micra_prebrew_infusion_mode # <-- CHANGE THIS
+              state: "PreBrewing" # <-- Verify this option name from your JSON
+          sequence:
+            - service: select.select_option
+              target:
+                entity_id: select.linea_micra_mode
+              data:
+                option: "Pre-brew"
+        - conditions:
+            - condition: state
+              entity_id: select.micra_prebrew_infusion_mode # <-- CHANGE THIS
+              state: "PreInfusion" # <-- Verify this option name from your JSON
+          sequence:
+            - service: select.select_option
+              target:
+                entity_id: select.linea_micra_mode
+              data:
+                option: "Pre-infusion"
+        - conditions:
+            - condition: state
+              entity_id: select.micra_prebrew_infusion_mode # <-- CHANGE THIS
+              state: "Disabled" # <-- Verify this option name from your JSON
+          sequence:
+            - service: select.select_option
+              target:
+                entity_id: select.linea_micra_mode
+              data:
+                option: "Disabled"
+
+# 5. Backflush Trigger
+
+- id: micra_backflush
+  alias: "ESP Control - Trigger Backflush"
+  trigger:
+    - platform: state
+      entity_id: switch.linea_micra_backflush
+      to: 'on'
+  action:
+    # Action 1: Press the actual backflush button on the Micra
+    - service: button.press
+      target:
+        entity_id: button.micra_start_backflush # <-- CHANGE THIS
+    # Action 2: Turn the ESP32 switch back off to make it momentary
+    - service: switch.turn_off
+      target:
+        entity_id: switch.linea_micra_backflush
+
+# 6. Pre-Infusion Time Sync (Two-way)
+
+- id: micra_preinfusion_time_sync_to
+  alias: "ESP Control - Sync Pre-Infusion Time to Micra"
+  trigger:
+    - platform: state
+      entity_id: number.linea_micra_preinfusion_time
+  action:
+    - service: number.set_value
+      target:
+        entity_id: number.micra_preinfusion_time # <-- CHANGE THIS
+      data:
+        value: "{{ trigger.to_state.state }}"
+
+- id: micra_preinfusion_time_sync_from
+  alias: "ESP Control - Sync Pre-Infusion Time from Micra"
+  trigger:
+    - platform: state
+      entity_id: number.micra_preinfusion_time # <-- CHANGE THIS
+  action:
+    - service: number.set_value
+      target:
+        entity_id: number.linea_micra_preinfusion_time
+      data:
+        value: "{{ trigger.to_state.state }}"
