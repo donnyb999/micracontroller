@@ -131,7 +131,7 @@ void ha_init() {
     preinfusionMode.setName("Pre-infusion Mode");
     preinfusionMode.setIcon("mdi:water-opacity");
     // Corrected: Provide options as a comma-separated string
-    preinfusionMode.setOptions("Pre-brew,Pre-infusion,Disabled");
+    preinfusionMode.setOptions("Pre-brew;Pre-infusion;Disabled");
     preinfusionMode.onCommand(onModeSelectCommand);
 
     backflushSwitch.setName("Backflush");
