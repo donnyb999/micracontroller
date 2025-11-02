@@ -23,7 +23,8 @@ const char* mqtt_user = MQTT_USER;
 const char* mqtt_password = MQTT_PASSWORD;
 
 WiFiClient client;
-HADevice device("esp32_linea_micra_ctrl"); // Unique device name
+byte mac[6];
+HADevice device(mac, sizeof(mac));
 HAMqtt mqtt(client, device);
 
 // Define HA entities
@@ -113,6 +114,7 @@ void ha_init() {
         delay(500);
         Serial.print(".");
     }
+    WiFi.macAddress(mac);
     Serial.println("\nWiFi connected.");
     Serial.print("IP address: ");
     Serial.println(WiFi.localIP());
@@ -131,7 +133,7 @@ void ha_init() {
     preinfusionMode.setName("Pre-infusion Mode");
     preinfusionMode.setIcon("mdi:water-opacity");
     // Corrected: Provide options as a comma-separated string
-    preinfusionMode.setOptions("Pre-brew,Pre-infusion,Disabled");
+    preinfusionMode.setOptions("Pre-brew;Pre-infusion;Disabled");
     preinfusionMode.onCommand(onModeSelectCommand);
 
     backflushSwitch.setName("Backflush");
