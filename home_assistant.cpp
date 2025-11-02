@@ -177,6 +177,7 @@ void ha_init() {
 
 
     Serial.println("Connecting to MQTT broker...");
+    mqtt.setDiscoveryPrefix("homeassistant"); // Explicitly set the discovery topic
     mqtt.begin(mqtt_server, mqtt_user, mqtt_password);
 
     Serial.println("HA Init Complete.");
