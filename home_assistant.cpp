@@ -124,6 +124,8 @@ void ha_init() {
     device.setManufacturer("YourName/DIY");
     device.setModel("ESP32-S3");
     device.setSoftwareVersion("1.0.0");
+    device.enableSharedAvailability();
+    device.enableLastWill();
 
     // Configure entities
     machinePower.setName("Machine Power");
