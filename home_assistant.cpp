@@ -23,8 +23,8 @@ const char* mqtt_user = MQTT_USER;
 const char* mqtt_password = MQTT_PASSWORD;
 
 WiFiClient client;
-byte mac[6];
-HADevice device(mac, sizeof(mac));
+//byte mac[] = {};
+HADevice device("micracontroller");
 HAMqtt mqtt(client, device);
 
 // Define HA entities
@@ -114,7 +114,7 @@ void ha_init() {
         delay(500);
         Serial.print(".");
     }
-    WiFi.macAddress(mac);
+    //WiFi.macAddress(mac);
     Serial.println("\nWiFi connected.");
     Serial.print("IP address: ");
     Serial.println(WiFi.localIP());
