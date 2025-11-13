@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "250828-151944-esp32dev",
+			"path": "../../PlatformIO/Projects/250828-151944-esp32dev"
+		},
+		{
+			"name": "micracontroller",
+			"path": "../../PlatformIO/Projects/micracontroller"
+		}
+	],
+	"settings": {}
+}
