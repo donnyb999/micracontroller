@@ -189,6 +189,7 @@ void ha_init() {
     
     if (mqtt.begin(mqtt_server, mqtt_user, mqtt_password)) {
         Serial.println("MQTT connection successful.");
+        ha_request_initial_states();
     } else {
         Serial.println("MQTT connection failed! Please check credentials and broker status.");
     }
@@ -198,6 +199,16 @@ void ha_init() {
 
 void loop() {
     mqtt.loop();
+}
+
+void ha_request_initial_states() {
+    Serial.println("Requesting initial states from Home Assistant...");
+    machinePower.requestState();
+    preinfusionMode.requestState();
+    targetTemperature.requestState();
+    steamPower.requestState();
+    preinfusionTime.requestState();
+    lastShotDuration.requestState();
 }
 // --- Functions to Send Updates TO Home Assistant ---
 
@@ -231,20 +242,4 @@ void ha_trigger_backflush() {
     backflushSwitch.setState(true);
 }
 
-// Function to update HA with current values (e.g., on boot or reconnect)
-void ha_publish_initial_states() {
-    // It's generally better to read these from the machine via HA first,
-    // but if needed, you can publish the ESP's current cache.
-    // The variables current_... are not accessible here.
-    // Consider fetching state from HA entities after connection if needed.
-    // machinePower.setState(current_power_state);
-    // preinfusionMode.setCurrentState(current_mode_index); // Error: current_mode_index not declared
-    // targetTemperature.setState(current_temp); // Error: current_temp not declared
-    // steamPower.setState(current_steam); // Error: current_steam not declared
-    // preinfusionTime.setState(current_preinfusion_time); // Error: current_preinfusion_time not declared
-    
-    // lastShotDuration is updated by HA, no need to publish initial state here
-    backflushSwitch.setState(false); // Ensure backflush switch is initially off
-    Serial.println("Initial HA states published (except those needing read-back).");
-}
 
