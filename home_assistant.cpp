@@ -23,7 +23,8 @@ const char* mqtt_user = MQTT_USER;
 const char* mqtt_password = MQTT_PASSWORD;
 
 WiFiClient client;
-HADevice device("esp32_linea_micra_ctrl"); // Unique device name
+byte mac[6];
+HADevice device;
 HAMqtt mqtt(client, device);
 
 // Define HA entities
@@ -107,12 +108,19 @@ void onLastShotUpdate(HANumeric number, HANumber* sender) {
 // --- Initialization and Loop ---
 
 void ha_init() {
-    Serial.println("Connecting to WiFi...");
+    Serial.printf("Connecting to WiFi with SSID: %s\n", ssid);
     WiFi.begin(ssid, password);
+    unsigned long startTime = millis();
     while (WiFi.status() != WL_CONNECTED) {
+        if (millis() - startTime > 30000) { // 30-second timeout
+            Serial.println("\nFailed to connect to WiFi. Halting HA initialization.");
+            return;
+        }
         delay(500);
         Serial.print(".");
     }
+    WiFi.macAddress(mac);
+    device.setUniqueId(mac, sizeof(mac));
     Serial.println("\nWiFi connected.");
     Serial.print("IP address: ");
     Serial.println(WiFi.localIP());
@@ -174,8 +182,13 @@ void ha_init() {
     lastShotDuration.onCommand(onLastShotUpdate); // Use onCommand to receive updates
 
 
-    Serial.println("Connecting to MQTT broker...");
-    mqtt.begin(mqtt_server, mqtt_user, mqtt_password);
+    Serial.printf("Attempting to connect to MQTT broker at %s:%d as user '%s'...\n", mqtt_server, mqtt_port, mqtt_user);
+    mqtt.setDiscoveryPrefix("homeassistant"); // Explicitly set the discovery topic
+    if (mqtt.begin(mqtt_server, mqtt_user, mqtt_password)) {
+        Serial.println("MQTT connection successful.");
+    } else {
+        Serial.println("MQTT connection failed! Please check credentials and broker status.");
+    }
 
     Serial.println("HA Init Complete.");
 }
