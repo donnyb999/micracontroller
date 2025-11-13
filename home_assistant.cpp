@@ -185,21 +185,20 @@ void ha_init() {
 
 
     Serial.printf("Attempting to connect to MQTT broker at %s:%d as user '%s'...\n", mqtt_server, mqtt_port, mqtt_user);
-    mqtt.setDiscoveryPrefix("homeassistant"); // Explicitly set the discovery topic
-    /*
+    //mqtt.setDiscoveryPrefix("homeassistant"); // Explicitly set the discovery topic
+    
     if (mqtt.begin(mqtt_server, mqtt_user, mqtt_password)) {
         Serial.println("MQTT connection successful.");
     } else {
         Serial.println("MQTT connection failed! Please check credentials and broker status.");
-    */
-    mqtt.begin("192.168.50.32", "haas", "flazenf1")
+    }
+    //mqtt.begin("192.168.50.32", "haas", "flazenf1");
     Serial.println("HA Init Complete.");
 }
 
-void ha_loop() {
+void loop() {
     mqtt.loop();
 }
-
 // --- Functions to Send Updates TO Home Assistant ---
 
 void ha_set_machine_power(bool state) {

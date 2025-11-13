@@ -18,10 +18,10 @@ void setup() {
   Serial.println("Setup complete. Handing control over to FreeRTOS tasks.");
 }
 
-void loop() {
+void main_loop() {
   // The main Arduino loop is no longer needed.
   // LVGL updates, BLE, and encoder actions are handled by dedicated tasks.
   // This prevents race conditions and improves stability.
-  vTaskDelete(NULL); // Delete the loop task to save resources
+  //vTaskDelete(NULL); // Delete the loop task to save resources
 }
 
