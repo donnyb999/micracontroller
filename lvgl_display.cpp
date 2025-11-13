@@ -509,7 +509,7 @@ void load_presets() {
 // Event handler for preset buttons (short click and long press)
 static void preset_event_cb(lv_event_t * e) {
     reset_inactivity_timer(); // Reset brightness on touch
-    Serial.println("Preset button callback fired!"); // DEBUG: Confirm callback fires
+    //Serial.println("Preset button callback fired!"); // DEBUG: Confirm callback fires
     lv_event_code_t code = lv_event_get_code(e);
     intptr_t preset_index = (intptr_t)lv_event_get_user_data(e);
 
