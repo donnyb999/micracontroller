@@ -105,6 +105,48 @@ void onLastShotUpdate(HANumeric number, HANumber* sender) {
     update_ha_last_shot_ui(duration);
 }
 
+void onMessage(const char* topic, const uint8_t* payload, uint16_t length) {
+    Serial.printf("Received message on topic: %s\n", topic);
+    char p[length + 1];
+    memcpy(p, payload, length);
+    p[length] = '\0';
+    String message = p;
+
+    if (strcmp(topic, "homeassistant/switch/linea_micra_power/state") == 0) {
+        update_ha_power_switch_ui(message == "ON");
+    } else if (strcmp(topic, "homeassistant/select/linea_micra_mode/state") == 0) {
+        if (message == "Pre-brew") {
+            update_ha_mode_ui(0);
+        } else if (message == "Pre-infusion") {
+            update_ha_mode_ui(1);
+        } else if (message == "Disabled") {
+            update_ha_mode_ui(2);
+        }
+    } else if (strcmp(topic, "homeassistant/number/linea_micra_target_temp/state") == 0) {
+        update_ha_temperature_ui(message.toFloat());
+    } else if (strcmp(topic, "homeassistant/number/linea_micra_steam_power/state") == 0) {
+        update_ha_steam_power_ui(message.toInt());
+    } else if (strcmp(topic, "homeassistant/number/linea_micra_preinfusion_time/state") == 0) {
+        update_ha_preinfusion_time_ui(message.toFloat());
+    } else if (strcmp(topic, "homeassistant/number/linea_micra_last_shot/state") == 0) {
+        update_ha_last_shot_ui(message.toFloat());
+    }
+}
+
+void onConnected() {
+    Serial.println("Connected to MQTT broker, subscribing to state topics...");
+    // Subscribe to the state topics for each entity
+    mqtt.subscribe("homeassistant/switch/linea_micra_power/state");
+    mqtt.subscribe("homeassistant/select/linea_micra_mode/state");
+    mqtt.subscribe("homeassistant/number/linea_micra_target_temp/state");
+    mqtt.subscribe("homeassistant/number/linea_micra_steam_power/state");
+    mqtt.subscribe("homeassistant/number/linea_micra_preinfusion_time/state");
+    mqtt.subscribe("homeassistant/number/linea_micra_last_shot/state");
+
+    // Request initial states
+    ha_request_initial_states();
+}
+
 // --- Initialization and Loop ---
 
 void ha_init() {
@@ -186,6 +228,8 @@ void ha_init() {
 
     Serial.printf("Attempting to connect to MQTT broker at %s:%d as user '%s'...\n", mqtt_server, mqtt_port, mqtt_user);
     //mqtt.setDiscoveryPrefix("homeassistant"); // Explicitly set the discovery topic
+    mqtt.onConnected(onConnected);
+    mqtt.onMessage(onMessage);
     
     if (mqtt.begin(mqtt_server, mqtt_user, mqtt_password)) {
         Serial.println("MQTT connection successful.");
@@ -198,6 +242,16 @@ void ha_init() {
 
 void loop() {
     mqtt.loop();
+}
+
+void ha_request_initial_states() {
+    Serial.println("Requesting initial states from Home Assistant...");
+    machinePower.requestState();
+    preinfusionMode.requestState();
+    targetTemperature.requestState();
+    steamPower.requestState();
+    preinfusionTime.requestState();
+    lastShotDuration.requestState();
 }
 // --- Functions to Send Updates TO Home Assistant ---
 
@@ -231,20 +285,4 @@ void ha_trigger_backflush() {
     backflushSwitch.setState(true);
 }
 
-// Function to update HA with current values (e.g., on boot or reconnect)
-void ha_publish_initial_states() {
-    // It's generally better to read these from the machine via HA first,
-    // but if needed, you can publish the ESP's current cache.
-    // The variables current_... are not accessible here.
-    // Consider fetching state from HA entities after connection if needed.
-    // machinePower.setState(current_power_state);
-    // preinfusionMode.setCurrentState(current_mode_index); // Error: current_mode_index not declared
-    // targetTemperature.setState(current_temp); // Error: current_temp not declared
-    // steamPower.setState(current_steam); // Error: current_steam not declared
-    // preinfusionTime.setState(current_preinfusion_time); // Error: current_preinfusion_time not declared
-    
-    // lastShotDuration is updated by HA, no need to publish initial state here
-    backflushSwitch.setState(false); // Ensure backflush switch is initially off
-    Serial.println("Initial HA states published (except those needing read-back).");
-}
 

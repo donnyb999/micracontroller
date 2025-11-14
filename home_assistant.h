@@ -15,6 +15,7 @@
 
 // Function to initialize the Home Assistant connection
 void ha_init();
+void ha_request_initial_states();
 
 // --- Functions to send commands from UI to HA ---
 void ha_set_machine_power(bool state);
