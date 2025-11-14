@@ -142,9 +142,6 @@ void onConnected() {
     mqtt.subscribe("homeassistant/number/linea_micra_steam_power/state");
     mqtt.subscribe("homeassistant/number/linea_micra_preinfusion_time/state");
     mqtt.subscribe("homeassistant/number/linea_micra_last_shot/state");
-
-    // Request initial states
-    ha_request_initial_states();
 }
 
 // --- Initialization and Loop ---
@@ -244,15 +241,6 @@ void loop() {
     mqtt.loop();
 }
 
-void ha_request_initial_states() {
-    Serial.println("Requesting initial states from Home Assistant...");
-    machinePower.requestState();
-    preinfusionMode.requestState();
-    targetTemperature.requestState();
-    steamPower.requestState();
-    preinfusionTime.requestState();
-    lastShotDuration.requestState();
-}
 // --- Functions to Send Updates TO Home Assistant ---
 
 void ha_set_machine_power(bool state) {
