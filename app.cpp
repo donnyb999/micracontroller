@@ -14,9 +14,33 @@
 #include "lcd_bl_pwm_bsp.h" // Include the backlight header
 #include <Arduino.h>
 #include <Preferences.h>
+#include <WiFi.h> // Include for WiFi status check
 #include "home_assistant.h" // Include for HA init
 
 Preferences preferences;
+
+// Task handle for the HA MQTT loop
+TaskHandle_t ha_loop_task_handle = NULL;
+
+// --- FreeRTOS Task for HA Loop ---
+void ha_loop_task(void *pvParameters) {
+    Serial.println("HA MQTT loop task started.");
+    for (;;) {
+        // Maintain WiFi connection
+        if (WiFi.status() != WL_CONNECTED) {
+            Serial.println("WiFi disconnected. Attempting to reconnect...");
+            WiFi.reconnect();
+            vTaskDelay(pdMS_TO_TICKS(5000)); // Wait 5 seconds before retrying
+            continue; // Skip MQTT loop until WiFi is back
+        }
+
+        // Maintain MQTT connection and process messages
+        mqtt.loop(); // Call loop to process MQTT messages
+
+        // A small delay to yield CPU time to other tasks
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
 
 // Define brightness levels (0-255 for 8-bit PWM)
 #define BRIGHTNESS_HIGH 178 // ~70% (255 * 0.7)
