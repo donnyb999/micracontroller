@@ -142,9 +142,6 @@ void onConnected() {
     mqtt.subscribe("homeassistant/number/linea_micra_steam_power/state");
     mqtt.subscribe("homeassistant/number/linea_micra_preinfusion_time/state");
     mqtt.subscribe("homeassistant/number/linea_micra_last_shot/state");
-
-    // Request initial states
-    mqtt.publish("shotstopper/status", "online", false); // Announce presence and trigger automation
 }
 
 // --- Initialization and Loop ---
@@ -227,7 +224,7 @@ void ha_init() {
 
 
     Serial.printf("Attempting to connect to MQTT broker at %s:%d as user '%s'...\n", mqtt_server, mqtt_port, mqtt_user);
-    mqtt.setDiscoveryPrefix("homeassistant"); // Explicitly set the discovery topic
+    //mqtt.setDiscoveryPrefix("homeassistant"); // Explicitly set the discovery topic
     mqtt.onConnected(onConnected);
     mqtt.onMessage(onMessage);
     
@@ -238,6 +235,10 @@ void ha_init() {
     }
     //mqtt.begin("192.168.50.32", "haas", "flazenf1");
     Serial.println("HA Init Complete.");
+}
+
+void loop() {
+    mqtt.loop();
 }
 
 // --- Functions to Send Updates TO Home Assistant ---
