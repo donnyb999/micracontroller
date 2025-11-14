@@ -36,9 +36,9 @@ void ha_loop_task(void *pvParameters) {
 
         // Maintain MQTT connection and process messages
         mqtt.loop(); // Call loop to process MQTT messages
-
+        
         // A small delay to yield CPU time to other tasks
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(10)); 
     }
 }
 
@@ -71,6 +71,16 @@ void app_init() {
     // After all other init, create a task to perform the initial BLE read
     // This runs in parallel and doesn't block the main setup.
     ble_perform_initial_read();
+
+    // Create the FreeRTOS task for the HA MQTT loop
+    xTaskCreate(
+        ha_loop_task,          // Task function
+        "HA Loop Task",        // Task name
+        4096,                  // Stack size
+        NULL,                  // Task parameters
+        1,                     // Priority
+        &ha_loop_task_handle   // Task handle
+    );
 
     Serial.println("Application initialization complete.");
 }
