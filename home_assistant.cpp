@@ -105,6 +105,48 @@ void onLastShotUpdate(HANumeric number, HANumber* sender) {
     update_ha_last_shot_ui(duration);
 }
 
+void onMessage(const char* topic, const uint8_t* payload, uint16_t length) {
+    Serial.printf("Received message on topic: %s\n", topic);
+    char p[length + 1];
+    memcpy(p, payload, length);
+    p[length] = '\0';
+    String message = p;
+
+    if (strcmp(topic, "homeassistant/switch/linea_micra_power/state") == 0) {
+        update_ha_power_switch_ui(message == "ON");
+    } else if (strcmp(topic, "homeassistant/select/linea_micra_mode/state") == 0) {
+        if (message == "Pre-brew") {
+            update_ha_mode_ui(0);
+        } else if (message == "Pre-infusion") {
+            update_ha_mode_ui(1);
+        } else if (message == "Disabled") {
+            update_ha_mode_ui(2);
+        }
+    } else if (strcmp(topic, "homeassistant/number/linea_micra_target_temp/state") == 0) {
+        update_ha_temperature_ui(message.toFloat());
+    } else if (strcmp(topic, "homeassistant/number/linea_micra_steam_power/state") == 0) {
+        update_ha_steam_power_ui(message.toInt());
+    } else if (strcmp(topic, "homeassistant/number/linea_micra_preinfusion_time/state") == 0) {
+        update_ha_preinfusion_time_ui(message.toFloat());
+    } else if (strcmp(topic, "homeassistant/number/linea_micra_last_shot/state") == 0) {
+        update_ha_last_shot_ui(message.toFloat());
+    }
+}
+
+void onConnected() {
+    Serial.println("Connected to MQTT broker, subscribing to state topics...");
+    // Subscribe to the state topics for each entity
+    mqtt.subscribe("homeassistant/switch/linea_micra_power/state");
+    mqtt.subscribe("homeassistant/select/linea_micra_mode/state");
+    mqtt.subscribe("homeassistant/number/linea_micra_target_temp/state");
+    mqtt.subscribe("homeassistant/number/linea_micra_steam_power/state");
+    mqtt.subscribe("homeassistant/number/linea_micra_preinfusion_time/state");
+    mqtt.subscribe("homeassistant/number/linea_micra_last_shot/state");
+
+    // Request initial states
+    ha_request_initial_states();
+}
+
 // --- Initialization and Loop ---
 
 void ha_init() {
@@ -186,10 +228,11 @@ void ha_init() {
 
     Serial.printf("Attempting to connect to MQTT broker at %s:%d as user '%s'...\n", mqtt_server, mqtt_port, mqtt_user);
     //mqtt.setDiscoveryPrefix("homeassistant"); // Explicitly set the discovery topic
+    mqtt.onConnected(onConnected);
+    mqtt.onMessage(onMessage);
     
     if (mqtt.begin(mqtt_server, mqtt_user, mqtt_password)) {
         Serial.println("MQTT connection successful.");
-        ha_request_initial_states();
     } else {
         Serial.println("MQTT connection failed! Please check credentials and broker status.");
     }
