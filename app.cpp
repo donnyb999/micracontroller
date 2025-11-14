@@ -14,6 +14,7 @@
 #include "lcd_bl_pwm_bsp.h" // Include the backlight header
 #include <Arduino.h>
 #include <Preferences.h>
+#include <WiFi.h> // Include for WiFi status check
 #include "home_assistant.h" // Include for HA init
 
 Preferences preferences;
@@ -34,12 +35,7 @@ void ha_loop_task(void *pvParameters) {
         }
 
         // Maintain MQTT connection and process messages
-        if (!mqtt.loop()) {
-            Serial.println("MQTT disconnected. It will be reconnected by the library's auto-retry mechanism.");
-             // The ArduinoHA library has built-in reconnection logic.
-            // A short delay prevents this loop from running too tightly if the broker is down.
-            vTaskDelay(pdMS_TO_TICKS(1000));
-        }
+        mqtt.loop(); // Call loop to process MQTT messages
 
         // A small delay to yield CPU time to other tasks
         vTaskDelay(pdMS_TO_TICKS(10));
