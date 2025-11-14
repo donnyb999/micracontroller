@@ -72,16 +72,6 @@ void app_init() {
     // This runs in parallel and doesn't block the main setup.
     ble_perform_initial_read();
 
-    // Create the FreeRTOS task for the HA MQTT loop
-    xTaskCreate(
-        ha_loop_task,          // Task function
-        "HA Loop Task",        // Task name
-        4096,                  // Stack size
-        NULL,                  // Task parameters
-        1,                     // Priority
-        &ha_loop_task_handle   // Task handle
-    );
-
     Serial.println("Application initialization complete.");
 }
 
