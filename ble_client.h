@@ -9,14 +9,15 @@
 #define BLE_CLIENT_H
 
 #include <cstdint>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <BLECommand.h>
 
-void ble_client_init();
-void ble_perform_initial_read(); // New function to be called from app_init
-void write_target_weight(int8_t weight);
-// internal_read_weight is not public
-// int8_t read_target_weight(); // This function was removed as it's internal now
-
+extern QueueHandle_t bleCommandQueue;
 extern int8_t target_weight; // Make the global variable accessible
+
+void ble_client_task_init();
+void send_ble_command(BLECommand command);
 
 #endif // BLE_CLIENT_H
 
