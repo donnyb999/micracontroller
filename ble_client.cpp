@@ -131,8 +131,8 @@ void disconnectFromServer() {
 
 int8_t internal_read_weight() {
     if (connected && pRemoteCharacteristic && pRemoteCharacteristic->canRead()) {
-        std::string value = pRemoteCharacteristic->readValue();
-        if (!value.empty()) {
+        String value = pRemoteCharacteristic->readValue();
+        if (value.length() > 0) {
             return (int8_t)value[0];
         }
     }
