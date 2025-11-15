@@ -10,6 +10,7 @@
 
 #include <WiFi.h>
 #include <ArduinoHA.h> // ArduinoHA library
+#include <PubSubClient.h> // Include the underlying MQTT client library
 #include "secrets.h"    // For credentials - MAKE SURE MQTT_SERVER IS DEFINED HERE!
 #include "home_assistant.h"
 #include "lvgl_display.h" // To update UI based on HA commands

@@ -36,9 +36,9 @@ void ha_loop_task(void *pvParameters) {
 
         // Maintain MQTT connection and process messages
         mqtt.loop(); // Call loop to process MQTT messages
-        
+
         // A small delay to yield CPU time to other tasks
-        vTaskDelay(pdMS_TO_TICKS(10)); 
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
