@@ -19,9 +19,7 @@ void setup() {
 }
 
 void loop() {
-  // The main Arduino loop is no longer needed.
-  // LVGL updates, BLE, and encoder actions are handled by dedicated tasks.
-  // This prevents race conditions and improves stability.
-  vTaskDelete(NULL); // Delete the loop task to save resources
+  // This function is required by the Arduino toolchain, but all work is
+  // handled by FreeRTOS tasks.
 }
 

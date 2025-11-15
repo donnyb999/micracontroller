@@ -50,6 +50,8 @@ static lv_timer_t* deselection_timer = NULL;
 static lv_style_t style_selected;
 static lv_obj_t* selected_ui_obj = NULL;
 static lv_timer_t* power_long_press_timer = NULL; // Timer for power button
+static lv_timer_t* ha_debounce_timer = NULL;      // Timer for debouncing HA updates
+static ha_control_t debounced_control = HA_CONTROL_NONE; // Which control is being debounced
 
 // HA Screen UI Elements
 static lv_obj_t* ha_on_off_btn;
@@ -97,6 +99,33 @@ void reset_inactivity_timer(); // Declaration for internal use
 
 // --- Timer & Encoder Logic ---
 
+// Timer callback to send the debounced value to Home Assistant
+static void ha_debounce_timer_cb(lv_timer_t* timer) {
+    Serial.printf("Debounce timer fired for control: %d\n", debounced_control);
+
+    switch (debounced_control) {
+        case HA_CONTROL_MODE:
+            ha_set_preinfusion_mode(current_mode_index);
+            break;
+        case HA_CONTROL_PREINF_TIME:
+            ha_set_preinfusion_time(current_preinfusion_time);
+            break;
+        case HA_CONTROL_TEMP:
+            ha_set_target_temperature(current_temp);
+            break;
+        case HA_CONTROL_STEAM:
+            ha_set_steam_power(current_steam);
+            break;
+        default:
+            Serial.println("Debounce timer fired for unhandled control.");
+            break;
+    }
+
+    // Clean up
+    debounced_control = HA_CONTROL_NONE;
+    ha_debounce_timer = NULL; // Timer is one-shot, so just clear the handle
+}
+
 // Timer callback to deselect the active HA control after 5 seconds of inactivity
 static void deselect_timer_cb(lv_timer_t* timer) {
     Serial.println("Deselection timer fired.");
@@ -115,57 +144,68 @@ void ha_ui_reset_deselection_timer() {
 // Central handler for all encoder events on the Home Assistant screen
 void ha_ui_handle_encoder_turn(int8_t direction) {
     reset_inactivity_timer(); // Reset brightness on encoder turn
-    if (selected_ha_control == HA_CONTROL_NONE) return;
+    if (selected_ha_control == HA_CONTROL_NONE || selected_ha_control == HA_CONTROL_BACKFLUSH) {
+        // Debouncing doesn't apply to backflush, handle it separately.
+        if (selected_ha_control == HA_CONTROL_BACKFLUSH) {
+            static int8_t backflush_counter = 0;
+            backflush_counter += direction;
+            if (abs(backflush_counter) >= 3) {
+                ha_trigger_backflush();
+                Serial.println("Backflush activated via encoder.");
+                deselect_all_ha_controls();
+                backflush_counter = 0;
+            }
+        }
+        return;
+    }
 
     ha_ui_reset_deselection_timer(); // Reset HA control selection timer
 
+    // Set the control that is being debounced
+    debounced_control = selected_ha_control;
+
     static int8_t mode_counter = 0;
     static int8_t steam_counter = 0;
-    static int8_t backflush_counter = 0;
 
     switch (selected_ha_control) {
         case HA_CONTROL_MODE:
             mode_counter += direction;
             if (abs(mode_counter) >= 3) {
                 current_mode_index = (current_mode_index + (mode_counter > 0 ? 1 : -1) + 3) % 3;
-                ha_set_preinfusion_mode(current_mode_index);
-                update_ha_mode_ui(current_mode_index);
+                update_ha_mode_ui(current_mode_index); // Update UI immediately
                 mode_counter = 0;
             }
             break;
         case HA_CONTROL_PREINF_TIME:
             current_preinfusion_time += (float)direction * 0.1;
             if (current_preinfusion_time < 0.0) current_preinfusion_time = 0.0;
-            ha_set_preinfusion_time(current_preinfusion_time);
-            update_ha_preinfusion_time_ui(current_preinfusion_time);
+            update_ha_preinfusion_time_ui(current_preinfusion_time); // Update UI immediately
             break;
         case HA_CONTROL_TEMP:
             current_temp += (float)direction * 0.1;
-            ha_set_target_temperature(current_temp);
-            update_ha_temperature_ui(current_temp);
+            update_ha_temperature_ui(current_temp); // Update UI immediately
             break;
         case HA_CONTROL_STEAM:
             steam_counter += direction;
             if (abs(steam_counter) >= 3) {
-                current_steam += (steam_counter > 0 ? 1 : -1);
-                if (current_steam < 1) current_steam = 1;
-                if (current_steam > 3) current_steam = 3;
-                ha_set_steam_power(current_steam);
-                update_ha_steam_power_ui(current_steam);
+                int8_t new_steam = current_steam + (steam_counter > 0 ? 1 : -1);
+                if (new_steam < 1) new_steam = 1;
+                if (new_steam > 3) new_steam = 3;
+                current_steam = new_steam;
+                update_ha_steam_power_ui(current_steam); // Update UI immediately
                 steam_counter = 0;
-            }
-            break;
-        case HA_CONTROL_BACKFLUSH:
-            backflush_counter += direction;
-             if (abs(backflush_counter) >= 3) {
-                ha_trigger_backflush();
-                Serial.println("Backflush activated via encoder.");
-                deselect_all_ha_controls();
-                backflush_counter = 0;
             }
             break;
         default:
             break;
+    }
+
+    // (Re)start the debounce timer
+    if (ha_debounce_timer) {
+        lv_timer_reset(ha_debounce_timer);
+    } else {
+        ha_debounce_timer = lv_timer_create(ha_debounce_timer_cb, 1000, NULL);
+        lv_timer_set_repeat_count(ha_debounce_timer, 1);
     }
 }
 
@@ -240,8 +280,9 @@ static void ha_select_event_cb(lv_event_t* e) {
 
 // Manual long press implementation for power button
 static void power_long_press_timer_cb(lv_timer_t* timer) {
-    Serial.println("Power button long-press timer fired.");
-    ha_set_machine_power(!lv_obj_has_state(ha_on_off_btn, LV_STATE_CHECKED));
+    bool current_state = lv_obj_has_state(ha_on_off_btn, LV_STATE_CHECKED);
+    Serial.printf("Power button long-press timer fired. Requesting state change to %s.\n", !current_state ? "ON" : "OFF");
+    ha_set_machine_power(!current_state);
     power_long_press_timer = NULL; // Timer is one-shot, clear its handle
 }
 
@@ -509,7 +550,7 @@ void load_presets() {
 // Event handler for preset buttons (short click and long press)
 static void preset_event_cb(lv_event_t * e) {
     reset_inactivity_timer(); // Reset brightness on touch
-    Serial.println("Preset button callback fired!"); // DEBUG: Confirm callback fires
+    //Serial.println("Preset button callback fired!"); // DEBUG: Confirm callback fires
     lv_event_code_t code = lv_event_get_code(e);
     intptr_t preset_index = (intptr_t)lv_event_get_user_data(e);
 

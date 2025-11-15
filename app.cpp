@@ -14,9 +14,33 @@
 #include "lcd_bl_pwm_bsp.h" // Include the backlight header
 #include <Arduino.h>
 #include <Preferences.h>
+#include <WiFi.h> // Include for WiFi status check
 #include "home_assistant.h" // Include for HA init
 
 Preferences preferences;
+
+// Task handle for the HA MQTT loop
+TaskHandle_t ha_loop_task_handle = NULL;
+
+// --- FreeRTOS Task for HA Loop ---
+void ha_loop_task(void *pvParameters) {
+    Serial.println("HA MQTT loop task started.");
+    for (;;) {
+        // Maintain WiFi connection
+        if (WiFi.status() != WL_CONNECTED) {
+            Serial.println("WiFi disconnected. Attempting to reconnect...");
+            WiFi.reconnect();
+            vTaskDelay(pdMS_TO_TICKS(5000)); // Wait 5 seconds before retrying
+            continue; // Skip MQTT loop until WiFi is back
+        }
+
+        // Maintain MQTT connection and process messages
+        mqtt.loop(); // Call loop to process MQTT messages
+
+        // A small delay to yield CPU time to other tasks
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
 
 // Define brightness levels (0-255 for 8-bit PWM)
 #define BRIGHTNESS_HIGH 178 // ~70% (255 * 0.7)
@@ -47,6 +71,16 @@ void app_init() {
     // After all other init, create a task to perform the initial BLE read
     // This runs in parallel and doesn't block the main setup.
     ble_perform_initial_read();
+
+    // Create the FreeRTOS task for the HA MQTT loop
+    xTaskCreate(
+        ha_loop_task,          // Task function
+        "HA Loop Task",        // Task name
+        4096,                  // Stack size
+        NULL,                  // Task parameters
+        1,                     // Priority
+        &ha_loop_task_handle   // Task handle
+    );
 
     Serial.println("Application initialization complete.");
 }

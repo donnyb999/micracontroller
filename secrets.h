@@ -16,7 +16,7 @@
 // -- MQTT Broker Configuration --
 #define MQTT_SERVER "192.168.50.32"
 #define MQTT_PORT 1883
-#define MQTT_USER "hass"
+#define MQTT_USER "haas"
 #define MQTT_PASSWORD "flazenf1"
 
 // -- Home Assistant Device Configuration --

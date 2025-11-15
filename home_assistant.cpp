@@ -10,6 +10,7 @@
 
 #include <WiFi.h>
 #include <ArduinoHA.h> // ArduinoHA library
+#include <PubSubClient.h> // Include the underlying MQTT client library
 #include "secrets.h"    // For credentials - MAKE SURE MQTT_SERVER IS DEFINED HERE!
 #include "home_assistant.h"
 #include "lvgl_display.h" // To update UI based on HA commands
@@ -23,8 +24,8 @@ const char* mqtt_user = MQTT_USER;
 const char* mqtt_password = MQTT_PASSWORD;
 
 WiFiClient client;
-//byte mac[] = {};
-HADevice device("micracontroller");
+byte mac[6];
+HADevice device;
 HAMqtt mqtt(client, device);
 
 // Define HA entities
@@ -105,16 +106,64 @@ void onLastShotUpdate(HANumeric number, HANumber* sender) {
     update_ha_last_shot_ui(duration);
 }
 
+void onMessage(const char* topic, const uint8_t* payload, uint16_t length) {
+    Serial.printf("Received message on topic: %s\n", topic);
+    char p[length + 1];
+    memcpy(p, payload, length);
+    p[length] = '\0';
+    String message = p;
+
+    if (strcmp(topic, "homeassistant/switch/linea_micra_power/state") == 0) {
+        update_ha_power_switch_ui(message == "ON");
+    } else if (strcmp(topic, "homeassistant/select/linea_micra_mode/state") == 0) {
+        if (message == "Pre-brew") {
+            update_ha_mode_ui(0);
+        } else if (message == "Pre-infusion") {
+            update_ha_mode_ui(1);
+        } else if (message == "Disabled") {
+            update_ha_mode_ui(2);
+        }
+    } else if (strcmp(topic, "homeassistant/number/linea_micra_target_temp/state") == 0) {
+        update_ha_temperature_ui(message.toFloat());
+    } else if (strcmp(topic, "homeassistant/number/linea_micra_steam_power/state") == 0) {
+        update_ha_steam_power_ui(message.toInt());
+    } else if (strcmp(topic, "homeassistant/number/linea_micra_preinfusion_time/state") == 0) {
+        update_ha_preinfusion_time_ui(message.toFloat());
+    } else if (strcmp(topic, "homeassistant/number/linea_micra_last_shot/state") == 0) {
+        update_ha_last_shot_ui(message.toFloat());
+    }
+}
+
+void onConnected() {
+    Serial.println("Connected to MQTT broker, subscribing to state topics...");
+    // Subscribe to the state topics for each entity
+    mqtt.subscribe("homeassistant/switch/linea_micra_power/state");
+    mqtt.subscribe("homeassistant/select/linea_micra_mode/state");
+    mqtt.subscribe("homeassistant/number/linea_micra_target_temp/state");
+    mqtt.subscribe("homeassistant/number/linea_micra_steam_power/state");
+    mqtt.subscribe("homeassistant/number/linea_micra_preinfusion_time/state");
+    mqtt.subscribe("homeassistant/number/linea_micra_last_shot/state");
+
+    // Request initial states
+    mqtt.publish("shotstopper/status", "online", false); // Announce presence and trigger automation
+}
+
 // --- Initialization and Loop ---
 
 void ha_init() {
-    Serial.println("Connecting to WiFi...");
+    Serial.printf("Connecting to WiFi with SSID: %s\n", ssid);
     WiFi.begin(ssid, password);
+    unsigned long startTime = millis();
     while (WiFi.status() != WL_CONNECTED) {
+        if (millis() - startTime > 30000) { // 30-second timeout
+            Serial.println("\nFailed to connect to WiFi. Halting HA initialization.");
+            return;
+        }
         delay(500);
         Serial.print(".");
     }
-    //WiFi.macAddress(mac);
+    WiFi.macAddress(mac);
+    device.setUniqueId(mac, sizeof(mac));
     Serial.println("\nWiFi connected.");
     Serial.print("IP address: ");
     Serial.println(WiFi.localIP());
@@ -178,15 +227,18 @@ void ha_init() {
     lastShotDuration.onCommand(onLastShotUpdate); // Use onCommand to receive updates
 
 
-    Serial.println("Connecting to MQTT broker...");
+    Serial.printf("Attempting to connect to MQTT broker at %s:%d as user '%s'...\n", mqtt_server, mqtt_port, mqtt_user);
     mqtt.setDiscoveryPrefix("homeassistant"); // Explicitly set the discovery topic
-    mqtt.begin(mqtt_server, mqtt_user, mqtt_password);
-
+    mqtt.onConnected(onConnected);
+    mqtt.onMessage(onMessage);
+    
+    if (mqtt.begin(mqtt_server, mqtt_user, mqtt_password)) {
+        Serial.println("MQTT connection successful.");
+    } else {
+        Serial.println("MQTT connection failed! Please check credentials and broker status.");
+    }
+    //mqtt.begin("192.168.50.32", "haas", "flazenf1");
     Serial.println("HA Init Complete.");
-}
-
-void ha_loop() {
-    mqtt.loop();
 }
 
 // --- Functions to Send Updates TO Home Assistant ---
@@ -221,20 +273,4 @@ void ha_trigger_backflush() {
     backflushSwitch.setState(true);
 }
 
-// Function to update HA with current values (e.g., on boot or reconnect)
-void ha_publish_initial_states() {
-    // It's generally better to read these from the machine via HA first,
-    // but if needed, you can publish the ESP's current cache.
-    // The variables current_... are not accessible here.
-    // Consider fetching state from HA entities after connection if needed.
-    // machinePower.setState(current_power_state);
-    // preinfusionMode.setCurrentState(current_mode_index); // Error: current_mode_index not declared
-    // targetTemperature.setState(current_temp); // Error: current_temp not declared
-    // steamPower.setState(current_steam); // Error: current_steam not declared
-    // preinfusionTime.setState(current_preinfusion_time); // Error: current_preinfusion_time not declared
-    
-    // lastShotDuration is updated by HA, no need to publish initial state here
-    backflushSwitch.setState(false); // Ensure backflush switch is initially off
-    Serial.println("Initial HA states published (except those needing read-back).");
-}
 
