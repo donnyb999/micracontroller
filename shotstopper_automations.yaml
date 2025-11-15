@@ -11,41 +11,41 @@
     - service: mqtt.publish
       data:
         topic: "homeassistant/switch/linea_micra_power/state"
-        payload_template: "{{ states('switch.linea_micra_power') }}"
+        payload_template: "{{ states('switch.micra') }}"
         retain: true
 
     # --- Pre-infusion Mode ---
     - service: mqtt.publish
       data:
         topic: "homeassistant/select/linea_micra_mode/state"
-        payload_template: "{{ states('select.linea_micra_mode') }}"
+        payload_template: "{{ states('select.micra_prebrew_infusion_mode') }}"
         retain: true
 
     # --- Target Temperature ---
     - service: mqtt.publish
       data:
         topic: "homeassistant/number/linea_micra_target_temp/state"
-        payload_template: "{{ states('number.linea_micra_target_temp') }}"
+        payload_template: "{{ states('number.micra_coffee_target_temperature') }}"
         retain: true
 
     # --- Steam Power ---
     - service: mqtt.publish
       data:
         topic: "homeassistant/number/linea_micra_steam_power/state"
-        payload_template: "{{ states('number.linea_micra_steam_power') }}"
+        payload_template: "{{ states('select.micra_steam_level') }}"
         retain: true
 
     # --- Pre-infusion Time ---
     - service: mqtt.publish
       data:
         topic: "homeassistant/number/linea_micra_preinfusion_time/state"
-        payload_template: "{{ states('number.linea_micra_preinfusion_time') }}"
+        payload_template: "{{ states('number.micra_preinfusion_time') }}"
         retain: true
 
     # --- Last Shot Duration ---
     - service: mqtt.publish
       data:
         topic: "homeassistant/number/linea_micra_last_shot/state"
-        payload_template: "{{ states('number.linea_micra_last_shot') }}"
+        payload_template: "{{ states('input_number.last_shot_time') }}"
         retain: true
   mode: single
