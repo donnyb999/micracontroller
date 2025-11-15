@@ -15,16 +15,16 @@
 #include <Arduino.h>
 #include <lvgl.h> // Include LVGL FIRST
 #include "encoder.h"
-#include "ble_client.h" // Include BLE client for write_target_weight
-#include "lvgl_display.h" // Include display header AFTER lvgl.h
-#include "bidi_switch_knob.h" // Make sure this is the correct header name
+#include "ble_client.h"
+#include "BLECommand.h" // Include the command definition
+#include "lvgl_display.h"
+#include "bidi_switch_knob.h"
 
 
-// External variable for the target weight (used by Shot Stopper screen)
+// External variable for the target weight
 extern int8_t target_weight;
 
 // Timer handle for debouncing BLE writes
-// Corrected: Removed 'static' to match 'extern' declaration in header
 TimerHandle_t ble_write_timer = NULL;
 
 // Encoder pin definitions
@@ -39,8 +39,9 @@ TimerHandle_t ble_write_timer = NULL;
 // Callback function for the BLE write timer
 // This function is called 1 second *after* the last encoder turn
 static void ble_write_timer_callback(TimerHandle_t xTimer) {
-    Serial.printf("[%lu] BLE write timer expired. Writing final weight: %d\n", millis(), target_weight);
-    write_target_weight(target_weight); // Call the actual BLE write function
+    Serial.printf("[%lu] BLE write timer expired. Sending write command for weight: %d\n", millis(), target_weight);
+    BLECommand cmd = { .type = BLE_WRITE_WEIGHT, .payload = target_weight };
+    send_ble_command(cmd);
 }
 
 // Callback for left rotation
