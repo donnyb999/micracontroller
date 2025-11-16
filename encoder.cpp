@@ -39,8 +39,9 @@ TimerHandle_t ble_write_timer = NULL;
 // Callback function for the BLE write timer
 // This function is called 1 second *after* the last encoder turn
 static void ble_write_timer_callback(TimerHandle_t xTimer) {
-    Serial.printf("[%lu] BLE write timer expired. Writing final weight: %d\n", millis(), target_weight);
-    write_target_weight(target_weight); // Call the actual BLE write function
+    Serial.printf("[%lu] BLE write timer expired. Sending write command for final weight: %d\n", millis(), target_weight);
+    BLECommand cmd = { .type = BLE_WRITE_WEIGHT, .payload = target_weight };
+    send_ble_command(cmd); // Send the command to the BLE task
 }
 
 // Callback for left rotation
