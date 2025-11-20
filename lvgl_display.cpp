@@ -11,7 +11,6 @@
 #include "ble_client.h"
 #include "encoder.h" // Needed for extern ble_write_timer
 #include "app_events.h"
-#include "home_assistant.h"
 #include "lcd_bl_pwm_bsp.h" // Include backlight functions
 #include <lvgl.h>
 #include <cstdio>
@@ -42,36 +41,6 @@ static bool battery_filter_initialized = false;
 
 // --- Global State & UI Objects ---
 lv_obj_t* screen_shot_stopper;
-lv_obj_t* screen_ha;
-
-// HA Screen State
-static ha_control_t selected_ha_control = HA_CONTROL_NONE;
-static lv_timer_t* deselection_timer = NULL;
-static lv_style_t style_selected;
-static lv_obj_t* selected_ui_obj = NULL;
-static lv_timer_t* power_long_press_timer = NULL; // Timer for power button
-static lv_timer_t* ha_debounce_timer = NULL;      // Timer for debouncing HA updates
-static ha_control_t debounced_control = HA_CONTROL_NONE; // Which control is being debounced
-
-// HA Screen UI Elements
-static lv_obj_t* ha_on_off_btn;
-static lv_obj_t* ha_mode_cont;
-static lv_obj_t* ha_mode_label;
-static lv_obj_t* ha_preinf_time_cont;
-static lv_obj_t* ha_preinf_time_label;
-static lv_obj_t* ha_temp_cont;
-static lv_obj_t* ha_temp_label;
-static lv_obj_t* ha_steam_cont;
-static lv_obj_t* ha_steam_label;
-static lv_obj_t* ha_last_shot_label;
-static lv_obj_t* ha_backflush_cont;
-
-// HA Value Cache
-static int8_t current_mode_index = 0;
-static const char* PREINFUSION_MODES[] = {"Pre-brew", "Pre-infusion", "Disabled"};
-static float current_temp = 93.0;
-static int8_t current_steam = 3;
-static float current_preinfusion_time = 0.8;
 
 // Shot Stopper Screen Globals
 lv_obj_t * weight_label;
@@ -86,128 +55,12 @@ static const char* PRESET_KEYS[3] = {"p1", "p2", "p3"};
 extern Preferences preferences; // Declare external Preferences object
 
 // Forward Declarations
-void create_ha_screen(lv_obj_t* parent);
 void create_shot_stopper_screen(lv_obj_t* parent);
-static void deselect_all_ha_controls();
-static void swipe_event_cb(lv_event_t* e);
 void update_preset_label(uint8_t index); // Declare for use in create screen
 void load_presets(); // Declare for use in create screen
 static void battery_timer_cb(lv_timer_t* timer); // Battery timer callback
 static void inactivity_timer_cb(lv_timer_t* timer); // Inactivity timer callback
 void reset_inactivity_timer(); // Declaration for internal use
-
-
-// --- Timer & Encoder Logic ---
-
-// Timer callback to send the debounced value to Home Assistant
-static void ha_debounce_timer_cb(lv_timer_t* timer) {
-    Serial.printf("Debounce timer fired for control: %d\n", debounced_control);
-
-    switch (debounced_control) {
-        case HA_CONTROL_MODE:
-            ha_set_preinfusion_mode(current_mode_index);
-            break;
-        case HA_CONTROL_PREINF_TIME:
-            ha_set_preinfusion_time(current_preinfusion_time);
-            break;
-        case HA_CONTROL_TEMP:
-            ha_set_target_temperature(current_temp);
-            break;
-        case HA_CONTROL_STEAM:
-            ha_set_steam_power(current_steam);
-            break;
-        default:
-            Serial.println("Debounce timer fired for unhandled control.");
-            break;
-    }
-
-    // Clean up
-    debounced_control = HA_CONTROL_NONE;
-    ha_debounce_timer = NULL; // Timer is one-shot, so just clear the handle
-}
-
-// Timer callback to deselect the active HA control after 5 seconds of inactivity
-static void deselect_timer_cb(lv_timer_t* timer) {
-    Serial.println("Deselection timer fired.");
-    deselect_all_ha_controls();
-    lv_timer_del(deselection_timer);
-    deselection_timer = NULL;
-}
-
-// Resets the 5-second HA deselection timer.
-void ha_ui_reset_deselection_timer() {
-    if (deselection_timer) {
-        lv_timer_reset(deselection_timer);
-    }
-}
-
-// Central handler for all encoder events on the Home Assistant screen
-void ha_ui_handle_encoder_turn(int8_t direction) {
-    reset_inactivity_timer(); // Reset brightness on encoder turn
-    if (selected_ha_control == HA_CONTROL_NONE || selected_ha_control == HA_CONTROL_BACKFLUSH) {
-        // Debouncing doesn't apply to backflush, handle it separately.
-        if (selected_ha_control == HA_CONTROL_BACKFLUSH) {
-            static int8_t backflush_counter = 0;
-            backflush_counter += direction;
-            if (abs(backflush_counter) >= 3) {
-                ha_trigger_backflush();
-                Serial.println("Backflush activated via encoder.");
-                deselect_all_ha_controls();
-                backflush_counter = 0;
-            }
-        }
-        return;
-    }
-
-    ha_ui_reset_deselection_timer(); // Reset HA control selection timer
-
-    // Set the control that is being debounced
-    debounced_control = selected_ha_control;
-
-    static int8_t mode_counter = 0;
-    static int8_t steam_counter = 0;
-
-    switch (selected_ha_control) {
-        case HA_CONTROL_MODE:
-            mode_counter += direction;
-            if (abs(mode_counter) >= 3) {
-                current_mode_index = (current_mode_index + (mode_counter > 0 ? 1 : -1) + 3) % 3;
-                update_ha_mode_ui(current_mode_index); // Update UI immediately
-                mode_counter = 0;
-            }
-            break;
-        case HA_CONTROL_PREINF_TIME:
-            current_preinfusion_time += (float)direction * 0.1;
-            if (current_preinfusion_time < 0.0) current_preinfusion_time = 0.0;
-            update_ha_preinfusion_time_ui(current_preinfusion_time); // Update UI immediately
-            break;
-        case HA_CONTROL_TEMP:
-            current_temp += (float)direction * 0.1;
-            update_ha_temperature_ui(current_temp); // Update UI immediately
-            break;
-        case HA_CONTROL_STEAM:
-            steam_counter += direction;
-            if (abs(steam_counter) >= 3) {
-                int8_t new_steam = current_steam + (steam_counter > 0 ? 1 : -1);
-                if (new_steam < 1) new_steam = 1;
-                if (new_steam > 3) new_steam = 3;
-                current_steam = new_steam;
-                update_ha_steam_power_ui(current_steam); // Update UI immediately
-                steam_counter = 0;
-            }
-            break;
-        default:
-            break;
-    }
-
-    // (Re)start the debounce timer
-    if (ha_debounce_timer) {
-        lv_timer_reset(ha_debounce_timer);
-    } else {
-        ha_debounce_timer = lv_timer_create(ha_debounce_timer_cb, 1000, NULL);
-        lv_timer_set_repeat_count(ha_debounce_timer, 1);
-    }
-}
 
 // --- Brightness Inactivity Logic ---
 
@@ -244,169 +97,6 @@ void reset_inactivity_timer() {
     } else {
         Serial.println("Error: Inactivity timer not initialized!");
     }
-}
-
-
-// --- UI Creation & Event Handlers ---
-
-// Deselects any active HA control and removes its highlight
-static void deselect_all_ha_controls() {
-    if (selected_ui_obj) {
-        lv_obj_remove_style(selected_ui_obj, &style_selected, 0);
-        selected_ui_obj = NULL;
-    }
-    selected_ha_control = HA_CONTROL_NONE;
-}
-
-// Generic event handler for tapping a selectable HA control
-static void ha_select_event_cb(lv_event_t* e) {
-    reset_inactivity_timer(); // Reset brightness on touch
-    deselect_all_ha_controls();
-
-    ha_control_t control_type = (ha_control_t)(intptr_t)lv_event_get_user_data(e);
-    selected_ui_obj = (lv_obj_t*)lv_event_get_target(e); // Cast to lv_obj_t*
-
-    selected_ha_control = control_type;
-    lv_obj_add_style(selected_ui_obj, &style_selected, 0);
-    Serial.printf("Selected control: %d\n", control_type);
-
-    if (deselection_timer) {
-        lv_timer_reset(deselection_timer);
-    } else {
-        deselection_timer = lv_timer_create(deselect_timer_cb, 5000, NULL);
-        lv_timer_set_repeat_count(deselection_timer, 1);
-    }
-}
-
-// Manual long press implementation for power button
-static void power_long_press_timer_cb(lv_timer_t* timer) {
-    bool current_state = lv_obj_has_state(ha_on_off_btn, LV_STATE_CHECKED);
-    Serial.printf("Power button long-press timer fired. Requesting state change to %s.\n", !current_state ? "ON" : "OFF");
-    ha_set_machine_power(!current_state);
-    power_long_press_timer = NULL; // Timer is one-shot, clear its handle
-}
-
-static void ha_power_press_event_cb(lv_event_t* e) {
-    reset_inactivity_timer(); // Reset brightness on touch
-    lv_event_code_t code = lv_event_get_code(e);
-
-    if (code == LV_EVENT_PRESSED) {
-        Serial.println("Power button pressed, starting 2s timer.");
-        if (power_long_press_timer) {
-            lv_timer_del(power_long_press_timer);
-        }
-        power_long_press_timer = lv_timer_create(power_long_press_timer_cb, 2000, NULL);
-        lv_timer_set_repeat_count(power_long_press_timer, 1);
-    } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
-        if (power_long_press_timer) {
-            Serial.println("Power button released, deleting timer.");
-            lv_timer_del(power_long_press_timer);
-            power_long_press_timer = NULL;
-        }
-    }
-}
-
-// Event handler for screen swiping
-static void swipe_event_cb(lv_event_t* e) {
-    reset_inactivity_timer(); // Reset brightness on swipe
-    lv_indev_t * indev = lv_indev_active();
-    if(indev == NULL) return; // Should not happen with gestures
-
-    lv_dir_t dir = lv_indev_get_gesture_dir(indev);
-    Serial.printf("Swipe event detected! Direction: %d\n", dir); // DEBUG
-
-    if (dir == LV_DIR_TOP) {
-        Serial.println("Swiped UP - Loading HA screen."); // DEBUG
-        lv_scr_load_anim(screen_ha, LV_SCR_LOAD_ANIM_MOVE_TOP, 300, 0, false);
-    } else if (dir == LV_DIR_BOTTOM) {
-        Serial.println("Swiped DOWN - Loading Shot Stopper screen."); // DEBUG
-        lv_scr_load_anim(screen_shot_stopper, LV_SCR_LOAD_ANIM_MOVE_BOTTOM, 300, 0, false);
-    } else {
-         Serial.println("Swipe direction not vertical."); // DEBUG
-    }
-}
-
-// --- Home Assistant Screen Creation ---
-void create_ha_screen(lv_obj_t* parent) {
-    lv_obj_set_style_bg_color(parent, lv_color_hex(0x343a40), LV_PART_MAIN);
-    lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE); // Ensure scrolling is off
-
-    lv_style_init(&style_selected);
-    lv_style_set_border_color(&style_selected, lv_color_hex(0x89cff0));
-    lv_style_set_border_width(&style_selected, 3);
-    lv_style_set_border_side(&style_selected, LV_BORDER_SIDE_FULL);
-
-    // --- Reworked circular layout for 360x360 display ---
-    const int btn_size = 80;
-    const int radius = 130;
-
-    // Helper to create a circular button container.
-    // Note: This returns a generic lv_obj_t* but creates an lv_btn. This is fine.
-    // The caller is responsible for creating the label inside.
-    auto create_circular_container = [&](ha_control_t ctrl_type) -> lv_obj_t* {
-        lv_obj_t* btn = lv_btn_create(parent);
-        lv_obj_set_size(btn, btn_size, btn_size);
-        lv_obj_set_style_radius(btn, LV_RADIUS_CIRCLE, 0);
-        lv_obj_add_event_cb(btn, ha_select_event_cb, LV_EVENT_CLICKED, (void*)ctrl_type);
-        return btn;
-    };
-
-    // 1. Power Button (Top)
-    ha_on_off_btn = lv_btn_create(parent);
-    lv_obj_set_size(ha_on_off_btn, btn_size, btn_size);
-    lv_obj_set_style_radius(ha_on_off_btn, LV_RADIUS_CIRCLE, 0);
-    lv_obj_align(ha_on_off_btn, LV_ALIGN_CENTER, 0, -radius);
-    lv_obj_add_flag(ha_on_off_btn, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_add_event_cb(ha_on_off_btn, ha_power_press_event_cb, LV_EVENT_ALL, NULL);
-    lv_obj_t* on_off_label = lv_label_create(ha_on_off_btn);
-    lv_label_set_text(on_off_label, LV_SYMBOL_POWER);
-    lv_obj_center(on_off_label);
-
-    // 2. Mode (Top-Right)
-    ha_mode_cont = create_circular_container(HA_CONTROL_MODE);
-    lv_obj_align(ha_mode_cont, LV_ALIGN_CENTER, (int)(radius * 0.866f), (int)(-radius * 0.5f));
-    ha_mode_label = lv_label_create(ha_mode_cont);
-    lv_obj_center(ha_mode_label);
-
-    // 3. Pre-infusion Time (Bottom-Right)
-    ha_preinf_time_cont = create_circular_container(HA_CONTROL_PREINF_TIME);
-    lv_obj_align(ha_preinf_time_cont, LV_ALIGN_CENTER, (int)(radius * 0.866f), (int)(radius * 0.5f));
-    ha_preinf_time_label = lv_label_create(ha_preinf_time_cont);
-    lv_obj_center(ha_preinf_time_label);
-
-    // 4. Backflush (Bottom)
-    ha_backflush_cont = create_circular_container(HA_CONTROL_BACKFLUSH);
-    lv_obj_align(ha_backflush_cont, LV_ALIGN_CENTER, 0, radius);
-    lv_obj_t* backflush_label = lv_label_create(ha_backflush_cont);
-    lv_label_set_text(backflush_label, LV_SYMBOL_REFRESH);
-    lv_obj_center(backflush_label);
-
-    // 5. Steam (Bottom-Left)
-    ha_steam_cont = create_circular_container(HA_CONTROL_STEAM);
-    lv_obj_align(ha_steam_cont, LV_ALIGN_CENTER, (int)(-radius * 0.866f), (int)(radius * 0.5f));
-    ha_steam_label = lv_label_create(ha_steam_cont);
-    lv_obj_center(ha_steam_label);
-
-    // 6. Temp (Top-Left)
-    ha_temp_cont = create_circular_container(HA_CONTROL_TEMP);
-    lv_obj_align(ha_temp_cont, LV_ALIGN_CENTER, (int)(-radius * 0.866f), (int)(-radius * 0.5f));
-    ha_temp_label = lv_label_create(ha_temp_cont);
-    lv_obj_center(ha_temp_label);
-
-    // Last Shot Label (Center)
-    lv_obj_t* last_shot_cont = lv_obj_create(parent);
-    lv_obj_remove_style_all(last_shot_cont); // Make it transparent so it doesn't block view
-    lv_obj_set_size(last_shot_cont, 120, 50);
-    lv_obj_align(last_shot_cont, LV_ALIGN_CENTER, 0, 0);
-    ha_last_shot_label = lv_label_create(last_shot_cont);
-    lv_obj_center(ha_last_shot_label);
-    lv_obj_set_style_text_align(ha_last_shot_label, LV_TEXT_ALIGN_CENTER, 0);
-
-    update_ha_mode_ui(current_mode_index);
-    update_ha_preinfusion_time_ui(current_preinfusion_time);
-    update_ha_temperature_ui(current_temp);
-    update_ha_steam_power_ui(current_steam);
-    update_ha_last_shot_ui(0);
 }
 
 // --- Battery Timer Callback ---
@@ -456,18 +146,8 @@ void lvgl_display_init() {
     // Note: lv_init() is called in lcd_lvgl_Init() in lcd_bsp.c
 
     screen_shot_stopper = lv_obj_create(NULL);
-    screen_ha = lv_obj_create(NULL);
 
     create_shot_stopper_screen(screen_shot_stopper);
-    create_ha_screen(screen_ha);
-
-    // Removed GESTURE_BUBBLE flags
-    // lv_obj_add_flag(screen_shot_stopper, LV_OBJ_FLAG_GESTURE_BUBBLE);
-    // lv_obj_add_flag(screen_ha, LV_OBJ_FLAG_GESTURE_BUBBLE);
-
-    // Add event callbacks directly to screens
-    lv_obj_add_event_cb(screen_shot_stopper, swipe_event_cb, LV_EVENT_GESTURE, NULL);
-    lv_obj_add_event_cb(screen_ha, swipe_event_cb, LV_EVENT_GESTURE, NULL);
 
     lv_disp_load_scr(screen_shot_stopper);
 
@@ -481,42 +161,6 @@ void lvgl_display_init() {
     inactivity_timer = lv_timer_create(inactivity_timer_cb, INACTIVITY_TIMEOUT_DIM_MS, NULL);
     Serial.println("Inactivity timer created.");
 
-}
-
-// --- HA UI Update Functions ---
-void update_ha_power_switch_ui(bool state) {
-    if (ha_on_off_btn) {
-        state ? lv_obj_add_state(ha_on_off_btn, LV_STATE_CHECKED) : lv_obj_clear_state(ha_on_off_btn, LV_STATE_CHECKED);
-    }
-}
-void update_ha_mode_ui(int8_t mode_index) {
-    current_mode_index = mode_index;
-    if (ha_mode_label) {
-        lv_label_set_text(ha_mode_label, PREINFUSION_MODES[current_mode_index]);
-    }
-}
-void update_ha_temperature_ui(float temp) {
-    current_temp = temp;
-    if (ha_temp_label) {
-        lv_label_set_text_fmt(ha_temp_label, "%.1f C", current_temp);
-    }
-}
-void update_ha_steam_power_ui(int power) {
-    current_steam = power;
-    if (ha_steam_label) {
-        lv_label_set_text_fmt(ha_steam_label, "Pwr: %d", current_steam);
-    }
-}
-void update_ha_preinfusion_time_ui(float time) {
-    current_preinfusion_time = time;
-    if (ha_preinf_time_label) {
-        lv_label_set_text_fmt(ha_preinf_time_label, "%.1fs", current_preinfusion_time);
-    }
-}
-void update_ha_last_shot_ui(float seconds) {
-    if (ha_last_shot_label) {
-        lv_label_set_text_fmt(ha_last_shot_label, "Last: %.1fs", seconds);
-    }
 }
 
 // --- Shot Stopper Screen Code ---
@@ -732,4 +376,3 @@ void update_battery_status(uint8_t percentage) {
        // Serial.println("Battery label object does not exist!"); // Debug
     }
 }
-

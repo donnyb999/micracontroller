@@ -43,7 +43,12 @@ void ble_client_task(void *pvParameters);
 
 // --- BLE Callbacks ---
 class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
-    void onResult(BLEAdvertisedDevice advertisedDevice) {}
+    void onResult(BLEAdvertisedDevice advertisedDevice) {
+        if (advertisedDevice.isAdvertisingService(serviceUUID)) {
+            BLEDevice::getScan()->stop();
+            myDevice = new BLEAdvertisedDevice(advertisedDevice);
+        }
+    }
 };
 
 class MyClientCallback : public BLEClientCallbacks {
@@ -70,24 +75,10 @@ bool connectToServer() {
     pScan->setActiveScan(true);
     pScan->setInterval(100);
     pScan->setWindow(99);
-    BLEScanResults* results = pScan->start(5, false);
-
-    if (results == nullptr) {
-        update_ble_status(BLE_STATUS_FAILED);
-        return false;
-    }
-
     myDevice = nullptr;
-    for (int i = 0; i < results->getCount(); i++) {
-        BLEAdvertisedDevice device = results->getDevice(i);
-        if (device.isAdvertisingService(serviceUUID)) {
-            myDevice = new BLEAdvertisedDevice(device);
-            break;
-        }
-    }
-    pScan->clearResults();
+    pScan->start(5, false); // Scan will be stopped by the callback
 
-    if (myDevice == nullptr) {
+    if (myDevice == nullptr) { // Check if device was found by callback
         update_ble_status(BLE_STATUS_FAILED);
         return false;
     }
@@ -126,14 +117,18 @@ void disconnectFromServer() {
     }
     connected = false;
     pRemoteCharacteristic = nullptr;
+    if (myDevice != nullptr) {
+        delete myDevice;
+        myDevice = nullptr;
+    }
     update_ble_status(BLE_STATUS_DISCONNECTED);
 }
 
 int8_t internal_read_weight() {
     if (connected && pRemoteCharacteristic && pRemoteCharacteristic->canRead()) {
-        std::string value = pRemoteCharacteristic->readValue();
-        if (!value.empty()) {
-            return (int8_t)value[0];
+        String value = pRemoteCharacteristic->readValue();
+        if (value.length() > 0) {
+            return (int8_t)value.charAt(0);
         }
     }
     return -1;
