@@ -176,9 +176,12 @@ void ble_client_task(void *pvParameters) {
                         if (internal_write_weight(cmd.payload)) {
                             int8_t read_value = internal_read_weight();
                             if (read_value == cmd.payload) {
-                                target_weight = cmd.payload;
-                                update_display_value(target_weight);
-                                show_verification_checkmark();
+                                // Only update UI if the target matches what we just wrote.
+                                // If target_weight has changed (e.g. user turned knob),
+                                // we don't want to revert the display or show a checkmark for the old value.
+                                if (target_weight == cmd.payload) {
+                                    show_verification_checkmark();
+                                }
                             } else {
                                 update_ble_status(BLE_STATUS_FAILED);
                             }
