@@ -11,7 +11,7 @@
 #include <cstdint>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
-#include <BLECommand.h>
+#include "BLECommand.h"
 
 extern QueueHandle_t bleCommandQueue;
 extern int8_t target_weight; // Make the global variable accessible
