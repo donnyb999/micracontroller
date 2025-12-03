@@ -66,6 +66,10 @@ class MyClientCallback : public BLEClientCallbacks {
     }
 };
 
+// Create static instances of the callback classes to avoid memory leaks from 'new'
+static MyAdvertisedDeviceCallbacks advertisedDeviceCallbacks;
+static MyClientCallback clientCallback;
+
 // --- Core BLE Functions ---
 bool connectToServer() {
     if (connected) return true;
@@ -77,6 +81,7 @@ bool connectToServer() {
     pScan->setWindow(99);
     myDevice = nullptr;
     pScan->start(5, false); // Scan will be stopped by the callback
+    pScan->clearResults(); // Prevent memory leak from storing scan results
 
     if (myDevice == nullptr) { // Check if device was found by callback
         update_ble_status(BLE_STATUS_FAILED);
@@ -85,7 +90,7 @@ bool connectToServer() {
 
     if (pClient == nullptr) {
         pClient = BLEDevice::createClient();
-        pClient->setClientCallbacks(new MyClientCallback());
+        pClient->setClientCallbacks(&clientCallback);
     }
 
     if (!pClient->connect(myDevice)) {
@@ -163,8 +168,8 @@ void ble_client_task(void *pvParameters) {
                             update_display_value(target_weight);
                             show_verification_checkmark();
                         }
-                        disconnectFromServer();
                     }
+                    disconnectFromServer(); // Ensure cleanup happens even on connection failure
                     break;
                 case BLE_WRITE_WEIGHT:
                     if (connectToServer()) {
@@ -180,8 +185,8 @@ void ble_client_task(void *pvParameters) {
                         } else {
                             update_ble_status(BLE_STATUS_FAILED);
                         }
-                        disconnectFromServer();
                     }
+                    disconnectFromServer(); // Ensure cleanup happens even on connection failure
                     break;
             }
         }
@@ -192,7 +197,7 @@ void ble_client_task(void *pvParameters) {
 void ble_client_task_init() {
     bleCommandQueue = xQueueCreate(10, sizeof(BLECommand));
     BLEDevice::init("");
-    BLEDevice::getScan()->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
+    BLEDevice::getScan()->setAdvertisedDeviceCallbacks(&advertisedDeviceCallbacks);
     
     xTaskCreatePinnedToCore(
         ble_client_task,
